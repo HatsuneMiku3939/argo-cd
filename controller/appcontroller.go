@@ -678,6 +678,7 @@ func (ctrl *ApplicationController) getPermittedAppLiveObjects(app *appv1.Applica
 	return objsMap, nil
 }
 
+// TODO, should be able to delete app if proj is not exist
 func (ctrl *ApplicationController) finalizeApplicationDeletion(app *appv1.Application) ([]*unstructured.Unstructured, error) {
 	logCtx := log.WithField("application", app.Name)
 	logCtx.Infof("Deleting resources")
@@ -689,9 +690,10 @@ func (ctrl *ApplicationController) finalizeApplicationDeletion(app *appv1.Applic
 		}
 		return nil, nil
 	}
+	// gg
 	proj, err := ctrl.getAppProj(app)
 	if err != nil {
-		return nil, err
+		logCtx.Warning("Unable to find project")
 	}
 
 	err = argo.ValidateDestination(context.Background(), &app.Spec.Destination, ctrl.db)
@@ -699,9 +701,18 @@ func (ctrl *ApplicationController) finalizeApplicationDeletion(app *appv1.Applic
 		return nil, err
 	}
 
-	objsMap, err := ctrl.getPermittedAppLiveObjects(app, proj)
-	if err != nil {
-		return nil, err
+	// gg
+	var objsMap map[kube.ResourceKey]*unstructured.Unstructured
+	if proj != nil {
+		objsMap, err = ctrl.getPermittedAppLiveObjects(app, proj)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		objsMap, err = ctrl.stateCache.GetManagedLiveObjs(app, []*unstructured.Unstructured{})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	objs := make([]*unstructured.Unstructured, 0)
@@ -731,9 +742,17 @@ func (ctrl *ApplicationController) finalizeApplicationDeletion(app *appv1.Applic
 		return objs, err
 	}
 
-	objsMap, err = ctrl.getPermittedAppLiveObjects(app, proj)
-	if err != nil {
-		return nil, err
+	// gg
+	if proj != nil {
+		objsMap, err = ctrl.getPermittedAppLiveObjects(app, proj)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		objsMap, err = ctrl.stateCache.GetManagedLiveObjs(app, []*unstructured.Unstructured{})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	for k, obj := range objsMap {
